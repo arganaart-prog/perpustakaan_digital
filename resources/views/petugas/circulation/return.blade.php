@@ -16,11 +16,19 @@
                 <h3 class="font-semibold text-lg text-gray-900 mb-3">Scan QR Buku</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="border rounded p-3">
-                        <video id="camera-preview" class="w-full max-h-64 bg-black rounded" autoplay muted playsinline></video>
-                        <div class="mt-3 flex gap-2">
+                        <video id="camera-preview" class="w-full max-h-64 bg-black rounded object-cover" autoplay muted playsinline></video>
+                        <div id="html5qr-reader" class="w-full max-h-64 bg-black rounded overflow-hidden hidden"></div>
+                        <div id="html5qr-file-host" class="hidden" aria-hidden="true"></div>
+                        <div class="mt-3 flex flex-wrap gap-2">
                             <button type="button" id="start-scan-btn" class="px-3 py-2 bg-gray-800 text-white text-xs rounded">Mulai Scan</button>
                             <button type="button" id="stop-scan-btn" class="px-3 py-2 bg-gray-500 text-white text-xs rounded">Stop</button>
+                            <button type="button" id="qr-photo-btn" class="px-3 py-2 bg-teal-700 text-white text-xs rounded">Scan dari foto</button>
                         </div>
+                        <input type="file" id="qr-image-input" accept="image/*" capture="environment" class="hidden">
+                        <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2">
+                            Akses lewat <code class="text-[11px]">http://IP-lokal</code> memerlukan <strong>HTTPS</strong> atau konfigurasi manual.<br>
+                            <strong>Ingin pakai kamera?</strong> Buka <code class="text-[11px] select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, masukkan <code class="text-[11px] select-all">http://192.168.1.24:8000</code>, pilih <strong>Enabled</strong>, lalu restart Chrome.
+                        </p>
                     </div>
                     <div class="border rounded p-3">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Input kode manual</label>
@@ -134,12 +142,16 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
     <script>
         (function () {
             const returnScanBase = @json(url('/petugas/circulation/return/scan'));
             const video = document.getElementById('camera-preview');
+            const html5Region = document.getElementById('html5qr-reader');
             const startBtn = document.getElementById('start-scan-btn');
             const stopBtn = document.getElementById('stop-scan-btn');
+            const qrPhotoBtn = document.getElementById('qr-photo-btn');
+            const qrImageInput = document.getElementById('qr-image-input');
             const manualInput = document.getElementById('manual-book-code');
             const manualSearchBtn = document.getElementById('manual-search-btn');
             const modal = document.getElementById('return-modal');
@@ -161,6 +173,7 @@
             let stream = null;
             let detector = null;
             let timer = null;
+            let html5Scanner = null;
             let scanLocked = false;
 
             function extractCode(raw) {
@@ -278,52 +291,160 @@
                         const code = extractCode(val);
                         if (code) {
                             scanLocked = true;
-                            stopScan();
+                            await stopScan();
                             await loadReturnByCode(code);
                         }
                     }
                 } catch (e) {}
             }
 
-            async function startScan() {
-                if (!('BarcodeDetector' in window)) {
-                    alert('Browser ini belum mendukung BarcodeDetector. Gunakan Chrome/Edge terbaru.');
-                    return;
-                }
+            async function startNativeScan() {
                 detector = new BarcodeDetector({ formats: ['qr_code', 'code_128', 'ean_13'] });
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    throw new Error('no getUserMedia');
+                }
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                html5Region.classList.add('hidden');
+                video.classList.remove('hidden');
                 video.srcObject = stream;
                 scanLocked = false;
                 timer = setInterval(tick, 600);
             }
 
-            function stopScan() {
-                if (timer) clearInterval(timer);
-                timer = null;
-                if (stream) stream.getTracks().forEach(t => t.stop());
-                stream = null;
+            async function startHtml5Scan() {
+                if (typeof Html5Qrcode === 'undefined') {
+                    alert('Pustaka pemindai gagal dimuat. Muat ulang halaman lalu coba lagi.');
+                    return;
+                }
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    alert('Kamera diblokir karena tidak menggunakan HTTPS.\n\nSOLUSI UNTUK IP LOKAL:\n1. Buka chrome://flags/#unsafely-treat-insecure-origin-as-secure\n2. Masukkan http://192.168.1.24:8000\n3. Set ke ENABLED & Relaunch Chrome.\n\nAtau gunakan "Scan dari foto" sebagai alternatif.');
+                    return;
+                }
+                detector = null;
+                video.classList.add('hidden');
+                html5Region.classList.remove('hidden');
+                scanLocked = false;
+                html5Scanner = new Html5Qrcode('html5qr-reader');
+                try {
+                    await html5Scanner.start(
+                        { facingMode: 'environment' },
+                        { fps: 8, qrbox: { width: 220, height: 220 } },
+                        async (decodedText) => {
+                            if (scanLocked) return;
+                            const code = extractCode(decodedText);
+                            if (!code) return;
+                            scanLocked = true;
+                            await stopScan();
+                            await loadReturnByCode(code);
+                        },
+                        () => {}
+                    );
+                } catch (e) {
+                    video.classList.remove('hidden');
+                    html5Region.classList.add('hidden');
+                    if (html5Scanner) {
+                        try { await html5Scanner.stop(); } catch (err) {}
+                        try { html5Scanner.clear(); } catch (err) {}
+                        html5Scanner = null;
+                    }
+                    console.error(e);
+                    alert('Kamera tidak bisa dibuka. Pastikan izin kamera diberikan. Jika pakai IP lokal, aktifkan Flag "Insecure origins treated as secure" di Chrome terlebih dahulu.');
+                }
             }
 
-            startBtn.addEventListener('click', startScan);
-            stopBtn.addEventListener('click', stopScan);
+            async function startScan() {
+                await stopScan();
+                scanLocked = false;
+                if ('BarcodeDetector' in window) {
+                    try {
+                        await startNativeScan();
+                    } catch (e) {
+                        console.warn(e);
+                        await startHtml5Scan();
+                    }
+                } else {
+                    await startHtml5Scan();
+                }
+            }
+
+            async function stopScan() {
+                if (timer) clearInterval(timer);
+                timer = null;
+                detector = null;
+                if (html5Scanner) {
+                    const h = html5Scanner;
+                    html5Scanner = null;
+                    try {
+                        await h.stop();
+                    } catch (e) {}
+                    try {
+                        h.clear();
+                    } catch (e) {}
+                }
+                if (stream) {
+                    stream.getTracks().forEach(t => t.stop());
+                }
+                stream = null;
+                if (video) {
+                    video.srcObject = null;
+                    video.classList.remove('hidden');
+                }
+                html5Region.classList.add('hidden');
+            }
+
+            async function scanFromImageFile(file) {
+                if (typeof Html5Qrcode === 'undefined') {
+                    alert('Pustaka pemindai gagal dimuat. Muat ulang halaman.');
+                    return;
+                }
+                const hostId = 'html5qr-file-host';
+                const reader = new Html5Qrcode(hostId);
+                try {
+                    const text = await reader.scanFile(file, false);
+                    const code = extractCode(text);
+                    if (code) {
+                        await loadReturnByCode(code);
+                    } else {
+                        alert('QR tidak terbaca. Pastikan gambar fokus dan berisi kode buku.');
+                    }
+                } catch (e) {
+                    alert('QR tidak terbaca dari foto.');
+                } finally {
+                    try { await reader.clear(); } catch (e) {}
+                }
+            }
+
+            startBtn.addEventListener('click', () => startScan().catch(console.error));
+            stopBtn.addEventListener('click', () => stopScan());
+            qrPhotoBtn?.addEventListener('click', () => {
+                qrImageInput.value = '';
+                qrImageInput.click();
+            });
+            qrImageInput?.addEventListener('change', () => {
+                const file = qrImageInput.files?.[0];
+                if (!file) return;
+                scanFromImageFile(file).finally(() => { qrImageInput.value = ''; });
+            });
             manualSearchBtn?.addEventListener('click', async () => {
                 const code = extractCode(manualInput.value || '');
                 if (!code) return alert('Kode tidak valid');
                 await loadReturnByCode(code);
             });
             closeModalBtn?.addEventListener('click', () => {
+                scanLocked = false;
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
                 document.body.style.overflow = '';
             });
             modal?.addEventListener('click', (e) => {
                 if (e.target !== modal) return;
+                scanLocked = false;
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
                 document.body.style.overflow = '';
             });
             setReturnButtonState(false);
-            window.addEventListener('beforeunload', stopScan);
+            window.addEventListener('beforeunload', () => { stopScan(); });
         })();
     </script>
 </x-app-layout>

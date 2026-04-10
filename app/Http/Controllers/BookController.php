@@ -9,8 +9,9 @@ use App\Models\Borrow;
 use App\Models\LabelColor;
 use App\Models\Rack;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Endroid\QrCode\QrCode;
+use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -291,15 +292,12 @@ class BookController extends Controller
 
     private function generateQrSvgDataUri(string $payload): ?string
     {
-        $url = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&format=svg&data=' . urlencode($payload);
-        $response = Http::timeout(10)->get($url);
-
-        if (!$response->successful()) {
-            return null;
-        }
-
-        $svg = trim($response->body());
-        $svg = preg_replace('/<\?xml.*?\?>/i', '', $svg) ?? $svg;
+        $qrCode = new QrCode(data: $payload, size: 220, margin: 2);
+        $writer = new SvgWriter();
+        $result = $writer->write($qrCode, null, null, [
+            SvgWriter::WRITER_OPTION_EXCLUDE_XML_DECLARATION => true,
+        ]);
+        $svg = trim($result->getString());
 
         return 'data:image/svg+xml;base64,' . base64_encode($svg);
     }
