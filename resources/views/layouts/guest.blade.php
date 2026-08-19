@@ -2,25 +2,37 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Perpustakaan Digital') }}</title>
+        <title>{{ config('app.name', 'Skarifta Perpus') }}</title>
 
+        <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <link href="https://fonts.bunny.net/css?family=outfit:400,500,600,700&display=swap" rel="stylesheet" />
 
+        <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+        <style>
+            body { font-family: 'Outfit', sans-serif; }
+            [x-cloak] { display: none !important; }
+        </style>
     </head>
-    <body class="font-sans text-gray-900 antialiased">
-        <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-green-50 animate-fade-in-up">
+    <body class="bg-[#f8faff] text-gray-900 antialiased overflow-x-hidden">
+        <div class="min-h-screen flex flex-col items-center justify-center p-6 relative">
             
-            <div class="w-full sm:max-w-md mt-6 px-6 py-8 bg-white shadow-xl overflow-hidden sm:rounded-2xl border-t-4 border-green-500">
+            <!-- Dynamic Background Decorations -->
+            <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-100/50 rounded-full blur-[100px] -z-10"></div>
+            <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-100/50 rounded-full blur-[100px] -z-10"></div>
+
+            <div class="w-full max-w-[420px] animate-fade-in-up">
                 {{ $slot }}
             </div>
 
-            <div class="mt-8 text-center text-sm text-green-600 opacity-70">
-                &copy; {{ date('Y') }} Perpustakaan Digital. All rights reserved.
+            <div class="mt-12 text-center space-y-2">
+                <p class="text-[11px] text-gray-400 font-medium uppercase tracking-[0.2em]">&copy; {{ date('Y') }} Skarifta Perpus. Advanced Digital Library.</p>
+                <p class="text-[9px] text-gray-400/80 font-bold uppercase tracking-[0.2em]">Created by Ghozy Argana</p>
             </div>
 
         </div>

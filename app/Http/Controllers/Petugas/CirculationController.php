@@ -64,7 +64,7 @@ class CirculationController extends Controller
         $validated = $request->validate([
             'book_code' => ['required', 'string', 'exists:books,code'],
             'user_id' => ['required', 'exists:users,id'],
-            'duration_days' => ['required', 'integer', 'in:4,6,7,12,15,16'],
+            'duration_days' => ['required', 'integer', 'min:1', 'max:365'],
         ]);
 
         $book = Book::where('code', $validated['book_code'])->firstOrFail();
@@ -74,8 +74,20 @@ class CirculationController extends Controller
             return back()->withErrors(['user_id' => 'Peminjam harus role member.'])->withInput();
         }
 
-        if (!in_array($book->status, [Book::STATUS_AVAILABLE], true)) {
+        if (!in_array($book->status, [Book::STATUS_AVAILABLE, Book::STATUS_RESERVED], true)) {
             return back()->withErrors(['book_code' => 'Buku tidak tersedia untuk dipinjam.'])->withInput();
+        }
+
+        // Jika buku reserved, pastikan yang pinjam adalah orang yang berhak
+        if ($book->status === Book::STATUS_RESERVED) {
+            $activeQueue = BookQueue::where('book_id', $book->id)
+                ->where('user_id', $user->id)
+                ->whereIn('status', [BookQueue::STATUS_READY, BookQueue::STATUS_CALLED])
+                ->first();
+
+            if (!$activeQueue) {
+                return back()->withErrors(['user_id' => 'Buku ini dipesan oleh orang lain.'])->withInput();
+            }
         }
 
         $activeBorrowCount = Borrow::where('user_id', $user->id)
@@ -109,10 +121,24 @@ class CirculationController extends Controller
             ]);
 
             $book->update(['status' => Book::STATUS_BORROWED]);
+
+            // Jika ada antrian aktif, tandai DONE
+            BookQueue::where('book_id', $book->id)
+                ->where('user_id', $user->id)
+                ->whereIn('status', [BookQueue::STATUS_READY, BookQueue::STATUS_CALLED])
+                ->update(['status' => BookQueue::STATUS_DONE]);
+            
+            // Kirim Notifikasi Sukses ke Member
+            $user->notify(new \App\Notifications\GenericNotification([
+                'type' => 'borrow_started',
+                'title' => 'Peminjaman Berhasil',
+                'message' => "Buku '{$book->title}' resmi kamu pinjam hingga " . $now->copy()->addDays((int) $validated['duration_days'])->format('d/m/Y') . ". Selamat membaca!",
+                'action_url' => route('member.loans'),
+            ]));
         });
 
         return redirect()->route('petugas.circulation.loan', ['code' => $book->code])
-            ->with('success', 'Peminjaman berhasil dikonfirmasi.');
+            ->with('success', 'Peminjaman berhasil dikonfirmasi dan diberitahukan ke member.');
     }
 
     public function scannedBookData(string $code)
@@ -172,7 +198,12 @@ class CirculationController extends Controller
                 'due_date' => optional($activeBorrow->due_date)->format('d-m-Y H:i'),
                 'time_status' => $isLate ? 'LATE' : 'ON TIME',
                 'late_days' => $lateDays,
-                'fine_preview' => $lateDays * 5000,
+                'fine_preview' => $lateDays * 15000,
+                'punishment_type' => $activeBorrow->punishment_type,
+                'payment_method' => $activeBorrow->payment_method,
+                'payment_status' => $activeBorrow->payment_status,
+                'late_reason' => $activeBorrow->late_reason,
+                'late_evidence' => $activeBorrow->late_evidence,
                 'borrower' => [
                     'id' => $activeBorrow->user?->id,
                     'name' => $activeBorrow->user?->name,
@@ -338,6 +369,10 @@ class CirculationController extends Controller
     {
         $validated = $request->validate([
             'book_code' => ['required', 'string', 'exists:books,code'],
+            'return_condition' => ['nullable', 'string', 'in:normal,lost'],
+            'lost_fine_amount' => ['nullable', 'numeric', 'min:0'],
+            'punishment_type' => ['nullable', 'string', 'in:fine,social'],
+            'social_punishment_description' => ['nullable', 'string', 'max:500'],
         ]);
 
         $book = Book::where('code', $validated['book_code'])->firstOrFail();
@@ -352,35 +387,81 @@ class CirculationController extends Controller
 
         $now = now();
         $lateDays = max(0, Carbon::parse($borrow->due_date)->startOfDay()->diffInDays($now->copy()->startOfDay(), false));
-        $fine = $lateDays > 0 ? $lateDays * 5000 : 0;
+        $condition = $validated['return_condition'] ?? 'normal';
+        $punishmentType = $validated['punishment_type'] ?? Borrow::PUNISHMENT_FINE;
 
-        DB::transaction(function () use ($borrow, $book, $now, $fine, $queueManager): void {
-            $borrow->update([
-                'return_date' => $now,
-                'status' => Borrow::STATUS_RETURNED,
-                'fine' => $fine,
-            ]);
+        DB::transaction(function () use ($borrow, $book, $now, $lateDays, $condition, $punishmentType, $validated, $queueManager): void {
+            if ($condition === 'lost') {
+                $lostFine = (int) ($validated['lost_fine_amount'] ?? 50000);
+                $borrow->update([
+                    'return_date' => $now,
+                    'status' => Borrow::STATUS_LOST,
+                    'fine' => $lostFine,
+                    'fine_type' => 'lost',
+                    'punishment_type' => Borrow::PUNISHMENT_FINE,
+                    'payment_status' => Borrow::PAYMENT_STATUS_UNPAID,
+                ]);
 
-            $book->update(['status' => Book::STATUS_AVAILABLE]);
+                $book->update(['status' => Book::STATUS_LOST]);
+            } else {
+                if ($lateDays > 0) {
+                    if ($punishmentType === Borrow::PUNISHMENT_SOCIAL) {
+                        $borrow->update([
+                            'return_date' => $now,
+                            'status' => Borrow::STATUS_RETURNED,
+                            'fine' => 0,
+                            'punishment_type' => Borrow::PUNISHMENT_SOCIAL,
+                            'social_punishment_description' => $validated['social_punishment_description'] ?: 'Menjalankan sanksi sosial perpustakaan',
+                            'social_punishment_status' => 'assigned',
+                        ]);
+                    } else {
+                        $fine = $lateDays * 15000;
+                        $borrow->update([
+                            'return_date' => $now,
+                            'status' => Borrow::STATUS_RETURNED,
+                            'fine' => $fine,
+                            'fine_type' => 'late',
+                            'punishment_type' => Borrow::PUNISHMENT_FINE,
+                            'payment_status' => Borrow::PAYMENT_STATUS_UNPAID,
+                        ]);
+                    }
+                } else {
+                    $borrow->update([
+                        'return_date' => $now,
+                        'status' => Borrow::STATUS_RETURNED,
+                        'fine' => 0,
+                    ]);
+                }
 
-            // Setelah buku kembali, antrean berikutnya disiapkan terlebih dahulu (READY),
-            // belum dipanggil otomatis agar petugas tetap punya kontrol manual.
-            $queueManager->markNextQueueReady($book, $now);
+                $book->update(['status' => Book::STATUS_AVAILABLE]);
+                $nextQueue = $queueManager->markNextQueueReady($book, $now);
+                if ($nextQueue) {
+                    $called = $queueManager->callQueue($nextQueue, $now);
+                    app(\App\Services\BookQueueNotificationService::class)->notifyCalled($called, 'return_trigger');
+                }
+            }
         });
 
+        $msg = $condition === 'lost' 
+            ? 'Buku dicatat HILANG. Denda ganti rugi telah ditetapkan.'
+            : 'Buku berhasil dikembalikan. Notifikasi & chat otomatis telah dikirim jika ada antrean berikutnya.';
+
         return redirect()->route('petugas.circulation.return', ['code' => $book->code])
-            ->with('success', 'Buku berhasil dikembalikan.');
+            ->with('success', $msg);
     }
 
-    public function callQueue(BookQueue $bookQueue, BookQueueManager $queueManager)
+    public function callQueue(BookQueue $bookQueue, BookQueueManager $queueManager, BookQueueNotificationService $notifier)
     {
         if ($bookQueue->status !== BookQueue::STATUS_READY) {
             return back()->withErrors(['queue' => 'Antrian tidak dalam status READY.']);
         }
 
         $queueManager->callQueue($bookQueue);
+        
+        // Langsung kirim notifikasi & email saat dipanggil manual
+        $notifier->notifyCalled($bookQueue, 'manual_call');
 
-        return back()->with('success', 'Antrian berhasil dipanggil. Lanjutkan kirim notifikasi jika diperlukan.');
+        return back()->with('success', 'Antrian berhasil dipanggil dan notifikasi email telah terkirim.');
     }
 
     public function notifyQueue(BookQueue $bookQueue, BookQueueNotificationService $notifier)
@@ -415,9 +496,16 @@ class CirculationController extends Controller
             ->latest('borrow_date')
             ->paginate(10);
 
+        // Ambil antrean aktif (waiting, ready, called)
+        $activeQueues = BookQueue::with('user')
+            ->where('book_id', $book->id)
+            ->whereIn('status', [BookQueue::STATUS_WAITING, BookQueue::STATUS_READY, BookQueue::STATUS_CALLED])
+            ->orderBy('created_at', 'asc')
+            ->get();
+
         $availableCount = Book::where('status', Book::STATUS_AVAILABLE)->count();
 
-        return view('petugas.circulation.book-detail', compact('book', 'history', 'availableCount'));
+        return view('petugas.circulation.book-detail', compact('book', 'history', 'activeQueues', 'availableCount'));
     }
 
     public function payFine(Borrow $borrow)
@@ -455,19 +543,121 @@ class CirculationController extends Controller
             'review_note' => $validated['review_note'],
         ]);
 
-        return back()->with('success', 'Rangkuman ditolak.');
+        // Kirim Notifikasi ke Siswa
+        $student = $summary->borrow->user;
+        $book = $summary->borrow->book;
+        
+        $student->notify(new \App\Notifications\GenericNotification([
+            'type' => 'summary_rejected',
+            'title' => 'Rangkuman Ditolak',
+            'message' => "Rangkuman buku '{$book->title}' perlu diperbaiki. Alasan: {$validated['review_note']}",
+            'action_url' => route('member.loans'),
+        ]));
+
+        return back()->with('success', 'Rangkuman ditolak dan notifikasi telah dikirim ke siswa.');
+    }
+
+    public function summaryModeration()
+    {
+        $pendingSummaries = Summary::with(['borrow.user', 'borrow.book'])
+            ->where('status', 'pending')
+            ->latest()
+            ->paginate(15);
+
+        return view('petugas.summaries.moderation', compact('pendingSummaries'));
     }
 
     public function fines()
     {
         $fines = Borrow::with(['user', 'book'])
-            ->where('status', Borrow::STATUS_RETURNED)
-            ->where('fine', '>', 0)
-            ->whereNull('fine_paid_at')
+            ->where(function($q) {
+                $q->where('fine', '>', 0)
+                  ->whereNull('fine_paid_at');
+            })
+            ->orWhere(function($q) {
+                $q->where('punishment_type', Borrow::PUNISHMENT_SOCIAL)
+                  ->where('social_punishment_status', '!=', 'completed');
+            })
+            ->orWhere('payment_status', Borrow::PAYMENT_STATUS_PENDING)
             ->latest('return_date')
-            ->paginate(15);
+            ->paginate(20);
 
-        return view('petugas.fines.index', compact('fines'));
+        $socialPunishments = Borrow::with(['user', 'book'])
+            ->where('punishment_type', Borrow::PUNISHMENT_SOCIAL)
+            ->latest('return_date')
+            ->get();
+
+        return view('petugas.fines.index', compact('fines', 'socialPunishments'));
+    }
+
+    public function confirmCashFine(Borrow $borrow)
+    {
+        $borrow->update([
+            'payment_method' => Borrow::PAYMENT_CASH,
+            'payment_status' => Borrow::PAYMENT_STATUS_PAID,
+            'fine_paid_at' => now(),
+        ]);
+
+        return back()->with('success', 'Pembayaran tunai (cash) berhasil dikonfirmasi dan denda dinyatakan LUNAS.');
+    }
+
+    public function verifyTransferProof(Request $request, Borrow $borrow)
+    {
+        $action = $request->input('action');
+        if ($action === 'approve') {
+            $borrow->update([
+                'payment_status' => Borrow::PAYMENT_STATUS_PAID,
+                'fine_paid_at' => now(),
+            ]);
+            return back()->with('success', 'Bukti transfer valid! Denda dinyatakan LUNAS.');
+        }
+
+        $borrow->update([
+            'payment_status' => Borrow::PAYMENT_STATUS_UNPAID,
+            'payment_proof' => null,
+        ]);
+        return back()->with('success', 'Bukti transfer ditolak. Status dikembalikan menjadi belum bayar.');
+    }
+
+    public function assignSocialPunishment(Request $request, Borrow $borrow)
+    {
+        $request->validate([
+            'social_punishment_description' => ['required', 'string', 'max:500'],
+        ]);
+
+        $borrow->update([
+            'punishment_type' => Borrow::PUNISHMENT_SOCIAL,
+            'social_punishment_description' => $request->social_punishment_description,
+            'social_punishment_status' => 'assigned',
+            'fine' => 0,
+        ]);
+
+        return back()->with('success', 'Tugas hukuman sosial berhasil ditetapkan kepada siswa.');
+    }
+
+    public function completeSocialPunishment(Borrow $borrow)
+    {
+        $borrow->update([
+            'social_punishment_status' => 'completed',
+            'social_punishment_completed_at' => now(),
+        ]);
+
+        return back()->with('success', 'Hukuman sosial telah diverifikasi SELESAI.');
+    }
+
+    public function viewBorrowFile(Borrow $borrow, string $type)
+    {
+        $filePath = match($type) {
+            'proof' => $borrow->payment_proof,
+            'evidence' => $borrow->late_evidence,
+            default => null,
+        };
+
+        if (!$filePath || !Storage::disk('public')->exists($filePath)) {
+            abort(404, 'File bukti tidak ditemukan.');
+        }
+
+        return Storage::disk('public')->response($filePath);
     }
 
     private function markOverdueBorrows(): void

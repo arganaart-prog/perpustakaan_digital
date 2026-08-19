@@ -36,6 +36,14 @@ class User extends Authenticatable
         // Student profile fields
         'kelas',
         'jurusan',
+        // Profile Customization & Avatar approval fields
+        'avatar',
+        'avatar_pending',
+        'bio',
+        'social_links',
+        'instagram',
+        'facebook',
+        'twitter',
     ];
 
     protected $hidden = [
@@ -55,6 +63,7 @@ class User extends Authenticatable
             'is_verified'         => 'boolean',
             'otp_unlocked'        => 'boolean',
             'is_visible'          => 'boolean',
+            'social_links'        => 'array',
         ];
     }
 
@@ -81,5 +90,23 @@ class User extends Authenticatable
     public function borrows(): HasMany
     {
         return $this->hasMany(Borrow::class);
+    }
+
+    public function getAvatarUrlAttribute(): string
+    {
+        if ($this->avatar && \Illuminate\Support\Facades\Storage::disk('public')->exists($this->avatar)) {
+            return route('users.avatar', $this);
+        }
+
+        return 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . '&color=047857&background=ecfdf5&size=256';
+    }
+
+    public function getPendingAvatarUrlAttribute(): ?string
+    {
+        if ($this->avatar_pending && \Illuminate\Support\Facades\Storage::disk('public')->exists($this->avatar_pending)) {
+            return route('users.avatar', ['user' => $this->id, 'pending' => 1]);
+        }
+
+        return null;
     }
 }

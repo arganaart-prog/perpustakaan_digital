@@ -50,4 +50,14 @@ class Book extends Model
         return $this->hasOne(Borrow::class)
             ->whereIn('status', [Borrow::STATUS_ACTIVE, Borrow::STATUS_LATE]);
     }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(BookReview::class);
+    }
+
+    public function approvedReviews(): HasMany
+    {
+        return $this->hasMany(BookReview::class)->where('is_approved', true)->latest();
+    }
 }

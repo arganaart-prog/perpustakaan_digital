@@ -15,6 +15,10 @@ class Summary extends Model
         'file',
         'status',
         'review_note',
+        'late_days',
+        'extra_pages_required',
+        'late_reason',
+        'late_evidence',
     ];
 
     public function borrow(): BelongsTo

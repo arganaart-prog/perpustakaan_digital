@@ -16,6 +16,16 @@ class Borrow extends Model
     public const STATUS_RETURNED = 'returned';
     public const STATUS_LOST = 'lost';
 
+    public const PUNISHMENT_FINE = 'fine';
+    public const PUNISHMENT_SOCIAL = 'social';
+
+    public const PAYMENT_CASH = 'cash';
+    public const PAYMENT_TRANSFER = 'transfer';
+
+    public const PAYMENT_STATUS_UNPAID = 'unpaid';
+    public const PAYMENT_STATUS_PENDING = 'pending_verification';
+    public const PAYMENT_STATUS_PAID = 'paid';
+
     protected $fillable = [
         'user_id',
         'book_id',
@@ -25,6 +35,16 @@ class Borrow extends Model
         'status',
         'fine',
         'fine_paid_at',
+        'punishment_type',
+        'fine_type',
+        'payment_method',
+        'payment_proof',
+        'payment_status',
+        'late_reason',
+        'late_evidence',
+        'social_punishment_description',
+        'social_punishment_status',
+        'social_punishment_completed_at',
     ];
 
     protected function casts(): array
@@ -34,6 +54,7 @@ class Borrow extends Model
             'due_date' => 'datetime',
             'return_date' => 'datetime',
             'fine_paid_at' => 'datetime',
+            'social_punishment_completed_at' => 'datetime',
         ];
     }
 

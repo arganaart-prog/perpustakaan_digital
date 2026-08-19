@@ -91,18 +91,37 @@
                             @csrf
                             <input type="hidden" name="book_code" id="submit-book-code">
                             <input type="hidden" name="user_id" id="submit-user-id">
-                            <div class="mb-3">
-                                <label for="submit-duration-days" class="block text-sm font-medium text-gray-700 mb-1">Durasi peminjaman</label>
-                                <select name="duration_days" id="submit-duration-days" class="w-full border-gray-300 rounded-md" required>
-                                    <option value="4">4 hari</option>
-                                    <option value="6">6 hari</option>
-                                    <option value="7" selected>7 hari</option>
-                                    <option value="12">12 hari</option>
-                                    <option value="15">15 hari</option>
-                                    <option value="16">16 hari</option>
-                                </select>
+                            <div class="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                                <label for="submit-duration-days" class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Durasi Peminjaman (Custom / Bebas)</label>
+                                
+                                <div class="flex items-center gap-2 mb-2.5">
+                                    <input 
+                                        type="number" 
+                                        name="duration_days" 
+                                        id="submit-duration-days" 
+                                        min="1" 
+                                        max="365" 
+                                        value="7" 
+                                        class="w-28 border-gray-300 rounded-lg text-sm font-black text-gray-900 focus:ring-emerald-500 focus:border-emerald-500 shadow-xs" 
+                                        required
+                                        oninput="updateDueDatePreview(this.value)"
+                                    >
+                                    <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Hari</span>
+                                    <span id="due-date-preview" class="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg font-bold ml-auto shadow-2xs">
+                                        Tempo: -
+                                    </span>
+                                </div>
+
+                                <!-- Quick Presets -->
+                                <div class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-1">Preset Cepat:</span>
+                                    <button type="button" onclick="setCustomDuration(3)" class="px-2.5 py-1 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 rounded-lg text-xs font-bold transition-all shadow-2xs">3 Hari</button>
+                                    <button type="button" onclick="setCustomDuration(7)" class="px-2.5 py-1 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 rounded-lg text-xs font-bold transition-all shadow-2xs">7 Hari</button>
+                                    <button type="button" onclick="setCustomDuration(14)" class="px-2.5 py-1 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 rounded-lg text-xs font-bold transition-all shadow-2xs">14 Hari</button>
+                                    <button type="button" onclick="setCustomDuration(30)" class="px-2.5 py-1 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 rounded-lg text-xs font-bold transition-all shadow-2xs">30 Hari</button>
+                                </div>
                             </div>
-                            <button type="submit" id="confirm-loan-btn" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm">Konfirmasi Pinjam</button>
+                            <button type="submit" id="confirm-loan-btn" class="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all active:scale-95">Konfirmasi Pinjam</button>
                         </form>
                     </div>
                 </div>
@@ -184,41 +203,55 @@
                 return '';
             }
 
-            async function loadBookByCode(code) {
-                const response = await fetch(`${scanUrlBase}/${encodeURIComponent(code)}`);
-                if (!response.ok) return alert('Buku tidak ditemukan');
-                const payload = await response.json();
-                const book = payload.book;
+            async function loadBookByCode(code, autoUserId = null) {
+                try {
+                    const response = await fetch(`${scanUrlBase}/${encodeURIComponent(code)}`);
+                    if (!response.ok) return alert('Buku tidak ditemukan');
+                    const payload = await response.json();
+                    const book = payload.book;
 
-                bookTitle.textContent = book.title || '-';
-                bookCodeText.textContent = book.code || '-';
-                bookStatus.textContent = book.status || '-';
-                setStatusBadge(book.status || '-');
-                bookCategory.textContent = book.category || '-';
-                bookRack.textContent = book.rack_code || '-';
-                bookAuthor.textContent = book.author || '-';
-                bookPages.textContent = book.pages || '-';
-                submitBookCode.value = book.code || '';
+                    bookTitle.textContent = book.title || '-';
+                    bookCodeText.textContent = book.code || '-';
+                    bookStatus.textContent = book.status || '-';
+                    setStatusBadge(book.status || '-');
+                    bookCategory.textContent = book.category || '-';
+                    bookRack.textContent = book.rack_code || '-';
+                    bookAuthor.textContent = book.author || '-';
+                    bookPages.textContent = book.pages || '-';
+                    submitBookCode.value = book.code || '';
 
-                if (book.cover_url) {
-                    bookCover.src = book.cover_url;
-                    bookCover.classList.remove('hidden');
-                } else {
-                    bookCover.classList.add('hidden');
-                    bookCover.src = '';
+                    if (book.cover_url) {
+                        bookCover.src = book.cover_url;
+                        bookCover.classList.remove('hidden');
+                    } else {
+                        bookCover.classList.add('hidden');
+                        bookCover.src = '';
+                    }
+
+                    bookCard.classList.remove('hidden');
+                    loanActionBar.classList.remove('hidden');
+                    borrowerStep.classList.add('hidden');
+                    borrowerSummaryCard.classList.add('hidden');
+                    borrowerResults.innerHTML = '';
+                    
+                    const s = (book.status || '').toUpperCase();
+                    const canStartLoan = s === 'AVAILABLE' || s === 'RESERVED';
+                    setBorrowerStepButtonState(canStartLoan);
+                    
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                    document.body.style.overflow = 'hidden';
+                    playBeep();
+
+                    // Jika ada autoUserId (dari URL), langsung load summary pembelinya
+                    if (autoUserId && canStartLoan) {
+                        borrowerStep.classList.remove('hidden');
+                        await loadBorrowerSummary(autoUserId);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Gagal memuat data buku');
                 }
-
-                bookCard.classList.remove('hidden');
-                loanActionBar.classList.remove('hidden');
-                borrowerStep.classList.add('hidden');
-                borrowerSummaryCard.classList.add('hidden');
-                borrowerResults.innerHTML = '';
-                const canStartLoan = (book.status || '').toUpperCase() === 'AVAILABLE';
-                setBorrowerStepButtonState(canStartLoan);
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-                document.body.style.overflow = 'hidden';
-                playBeep();
             }
 
             async function searchBorrower() {
@@ -295,7 +328,9 @@
                 video.classList.remove('hidden');
                 video.srcObject = stream;
                 scanLocked = false;
-                timer = setInterval(() => tick().catch(() => {}), 600);
+                timer = setInterval(tick, 150);
+                startBtn.classList.add('hidden');
+                stopBtn.classList.remove('hidden');
             }
 
             async function startHtml5Scan() {
@@ -326,6 +361,8 @@
                         },
                         () => {}
                     );
+                    startBtn.classList.add('hidden');
+                    stopBtn.classList.remove('hidden');
                 } catch (e) {
                     video.classList.remove('hidden');
                     html5Region.classList.add('hidden');
@@ -377,6 +414,8 @@
                     video.classList.remove('hidden');
                 }
                 html5Region.classList.add('hidden');
+                startBtn.classList.remove('hidden');
+                stopBtn.classList.add('hidden');
             }
 
             async function scanFromImageFile(file) {
@@ -482,6 +521,42 @@
                 loanActionBar.classList.add('hidden');
                 document.body.style.overflow = '';
             });
+
+            // Check for URL parameters on load
+            window.addEventListener('DOMContentLoaded', () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const studentId = urlParams.get('student_id');
+                
+                if (code) {
+                    loadBookByCode(code, studentId);
+                }
+            });
+
+            window.updateDueDatePreview = function(days) {
+                const previewEl = document.getElementById('due-date-preview');
+                if (!previewEl) return;
+                const numDays = parseInt(days, 10);
+                if (isNaN(numDays) || numDays < 1) {
+                    previewEl.textContent = 'Tempo: -';
+                    return;
+                }
+                const targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + numDays);
+                const formatted = targetDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+                previewEl.textContent = `Tempo: ${formatted}`;
+            };
+
+            window.setCustomDuration = function(days) {
+                const input = document.getElementById('submit-duration-days');
+                if (input) {
+                    input.value = days;
+                    window.updateDueDatePreview(days);
+                }
+            };
+
+            // Init preview
+            window.updateDueDatePreview(7);
         })();
     </script>
 </x-app-layout>

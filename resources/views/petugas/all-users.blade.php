@@ -74,6 +74,11 @@
                                             </form>
                                         @endif
 
+                                        <a href="{{ route('petugas.users.history', $user) }}" class="bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all active:scale-95 flex items-center gap-1.5 shadow-sm shadow-emerald-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                                            Aktivitas
+                                        </a>
+
                                         <form method="POST" action="{{ route('petugas.member.destroy', $user) }}" onsubmit="return confirm('HAPUS PERMANEN member {{ $user->name }}?')">
                                             @csrf
                                             @method('DELETE')

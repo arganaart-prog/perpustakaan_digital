@@ -23,6 +23,43 @@
                 </div>
             </div>
 
+            <!-- TABEL ANTREAN AKTIF (BARU) -->
+            <div class="bg-white rounded-xl shadow p-5 overflow-x-auto">
+                <h3 class="font-semibold text-lg mb-3">Daftar Pengantre Aktif</h3>
+                <table class="w-full text-sm border border-gray-200">
+                    <thead class="bg-indigo-50 text-indigo-700">
+                        <tr>
+                            <th class="px-3 py-2 text-left w-16">Urutan</th>
+                            <th class="px-3 py-2 text-left">Member</th>
+                            <th class="px-3 py-2 text-left">Status Antrean</th>
+                            <th class="px-3 py-2 text-left">Tanggal Booking</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        @forelse($activeQueues as $q)
+                            <tr class="{{ $q->status === 'ready' || $q->status === 'called' ? 'bg-emerald-50' : '' }}">
+                                <td class="px-3 py-2 font-bold">{{ $loop->iteration }}</td>
+                                <td class="px-3 py-2">
+                                    <div class="font-semibold">{{ $q->user->name }}</div>
+                                    <div class="text-[10px] text-gray-500 uppercase">{{ $q->user->member_id ?? '-' }}</div>
+                                </td>
+                                <td class="px-3 py-2">
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider {{ $q->status === 'ready' || $q->status === 'called' ? 'bg-emerald-200 text-emerald-800' : 'bg-gray-100 text-gray-600' }}">
+                                        {{ $q->status }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2 text-gray-500">{{ $q->created_at->format('d M Y H:i') }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="4" class="px-3 py-8 text-center text-gray-400 font-medium italic">Tidak ada pengantre aktif saat ini.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+                <p class="mt-3 text-[10px] text-gray-400 italic font-medium">* Antrean diurutkan berdasarkan First-Come-First-Serve (FIFO).</p>
+            </div>
+
             <div class="bg-white rounded-xl shadow p-5 overflow-x-auto">
                 <h3 class="font-semibold text-lg mb-3">Riwayat Peminjaman</h3>
                 <table class="w-full text-sm border border-gray-200">

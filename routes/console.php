@@ -23,3 +23,4 @@ Artisan::command('library:process-book-queues', function (BookQueueManager $mana
 })->purpose('Process ready and overdue book queues');
 
 Schedule::command('library:process-book-queues')->everyMinute();
+Schedule::command('app:auto-call-ready-users')->everyMinute();

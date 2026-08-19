@@ -1,20 +1,36 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">Mode Pengembalian</h2>
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            Sirkulasi: Pengembalian Buku & Penetapan Sanksi
+        </h2>
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-6xl mx-auto px-4 space-y-6">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             @if (session('success'))
-                <div class="px-4 py-3 bg-green-100 border border-green-300 text-green-800 rounded">{{ session('success') }}</div>
+                <div class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm font-bold animate-fade-in flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    <span>{{ session('success') }}</span>
+                </div>
             @endif
-            @error('queue')
-                <div class="px-4 py-3 bg-red-100 border border-red-300 text-red-800 rounded">{{ $message }}</div>
-            @enderror
 
-            <div class="bg-white rounded-xl shadow p-5">
-                <h3 class="font-semibold text-lg text-gray-900 mb-3">Scan QR Buku</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            @if ($errors->any())
+                <div class="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm font-bold">
+                    {{ $errors->first() }}
+                </div>
+            @endif
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Scanner & Input Manual -->
+                <div class="md:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                    <div class="flex items-center justify-between border-b border-gray-100 pb-4">
+                        <div>
+                            <h3 class="font-black text-gray-900 text-lg">Scan Barcode / QR Pengembalian</h3>
+                            <p class="text-xs text-gray-500 font-medium">Arahkan kamera ke QR Code buku untuk proses pengembalian dan cek keterlambatan.</p>
+                        </div>
+                        <span class="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-black rounded-full uppercase">Kamera Aktif</span>
+                    </div>
+
                     <div class="border rounded p-3">
                         <video id="camera-preview" class="w-full max-h-64 bg-black rounded object-cover" autoplay muted playsinline></video>
                         <div id="html5qr-reader" class="w-full max-h-64 bg-black rounded overflow-hidden hidden"></div>
@@ -30,63 +46,41 @@
                             <strong>Ingin pakai kamera?</strong> Buka <code class="text-[11px] select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, masukkan <code class="text-[11px] select-all">http://192.168.1.24:8000</code>, pilih <strong>Enabled</strong>, lalu restart Chrome.
                         </p>
                     </div>
-                    <div class="border rounded p-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Input kode manual</label>
+
+                    <!-- Input Manual Kode Buku -->
+                    <div class="pt-4 border-t border-gray-100 space-y-2">
+                        <label class="block text-xs font-black text-gray-700 uppercase tracking-wider">Atau Cari Manual Kode Buku</label>
                         <div class="flex gap-2">
-                            <input type="text" id="manual-book-code" placeholder="BK001" class="w-full border-gray-300 rounded-md">
-                            <button type="button" id="manual-search-btn" class="px-4 py-2 bg-indigo-600 text-white rounded">Cari</button>
+                            <input type="text" id="manual-book-code" placeholder="Contoh: BK-0001 atau scan scanner USB..." class="w-full rounded-xl border-gray-200 text-sm uppercase font-mono">
+                            <button id="manual-search-btn" type="button" class="px-5 py-2.5 bg-gray-900 hover:bg-black text-white text-xs font-black uppercase rounded-xl tracking-wider transition-all shadow-xs">Cari</button>
                         </div>
-                        <p class="text-xs text-gray-500 mt-2">Scan akan langsung memunculkan popup detail pengembalian.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div class="bg-white rounded-xl shadow p-5">
-                    <h3 class="font-semibold text-gray-900 mb-3">Antrian READY</h3>
-                    <div class="space-y-3">
-                        @forelse($readyQueues as $queue)
-                            <div class="border rounded p-3">
-                                <p class="font-semibold">{{ $queue->user->name }} - {{ $queue->book->title }}</p>
-                                <p class="text-xs text-gray-600">Kode: {{ $queue->book->code }} | Ready: {{ optional($queue->ready_at)->format('d-m-Y H:i') ?: '-' }}</p>
-                                <div class="mt-2 flex gap-2">
-                                    <form method="POST" action="{{ route('petugas.queues.call', $queue) }}">
-                                        @csrf
-                                        <button type="submit" class="px-3 py-2 text-xs rounded bg-blue-600 text-white">Panggil</button>
-                                    </form>
-                                    <form method="POST" action="{{ route('petugas.queues.complete', $queue) }}">
-                                        @csrf
-                                        <button type="submit" class="px-3 py-2 text-xs rounded bg-gray-600 text-white">Tandai Hadir</button>
-                                    </form>
-                                </div>
-                            </div>
-                        @empty
-                            <p class="text-sm text-gray-500">Belum ada antrian siap dipanggil.</p>
-                        @endforelse
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow p-5">
-                    <h3 class="font-semibold text-gray-900 mb-3">Antrian CALLED</h3>
+                <!-- Antrian Terpanggil -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+                    <h3 class="font-black text-gray-900 text-sm uppercase tracking-wider border-b border-gray-100 pb-3 flex items-center justify-between">
+                        <span>Antrean Dipanggil (Called)</span>
+                        <span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px]">{{ $calledQueues->count() }}</span>
+                    </h3>
                     <div class="space-y-3">
                         @forelse($calledQueues as $queue)
-                            <div class="border rounded p-3">
-                                <p class="font-semibold">{{ $queue->user->name }} - {{ $queue->book->title }}</p>
-                                <p class="text-xs text-gray-600">Deadline: {{ optional($queue->deadline)->format('d-m-Y H:i') ?: '-' }}</p>
-                                <p class="text-xs text-gray-600">Notif: {{ $queue->notified_at ? 'Sudah dikirim' : 'Belum dikirim' }}</p>
-                                <div class="mt-2 flex gap-2">
+                            <div class="border border-slate-100 rounded-xl p-3.5 bg-slate-50/50 space-y-2">
+                                <p class="font-bold text-xs text-gray-900">{{ $queue->user->name }}</p>
+                                <p class="text-[11px] text-gray-500 truncate">{{ $queue->book->title }}</p>
+                                <div class="flex gap-2 pt-1">
                                     <form method="POST" action="{{ route('petugas.queues.notify', $queue) }}">
                                         @csrf
-                                        <button type="submit" class="px-3 py-2 text-xs rounded bg-emerald-600 text-white">Kirim WA + Email</button>
+                                        <button type="submit" class="px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs">Kirim Notif</button>
                                     </form>
                                     <form method="POST" action="{{ route('petugas.queues.complete', $queue) }}">
                                         @csrf
-                                        <button type="submit" class="px-3 py-2 text-xs rounded bg-gray-600 text-white">Tandai Hadir</button>
+                                        <button type="submit" class="px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-slate-800 hover:bg-black text-white shadow-2xs">Tandai Hadir</button>
                                     </form>
                                 </div>
                             </div>
                         @empty
-                            <p class="text-sm text-gray-500">Belum ada antrian yang dipanggil.</p>
+                            <p class="text-xs text-gray-400 font-bold py-6 text-center">Belum ada antrean yang dipanggil.</p>
                         @endforelse
                     </div>
                 </div>
@@ -94,49 +88,96 @@
         </div>
     </div>
 
-    <div id="return-modal" class="fixed inset-0 bg-black/50 hidden items-start justify-center z-50 p-4 overflow-y-auto">
-        <div class="bg-white w-full max-w-4xl rounded-xl shadow-xl my-4">
-            <div class="p-5 border-b flex justify-between items-center">
-                <h3 class="text-lg font-bold text-gray-900">Detail Buku & Pengembalian</h3>
-                <button id="close-return-modal" type="button" class="text-gray-500 hover:text-gray-700">✕</button>
+    <!-- MODAL PROSES PENGEMBALIAN & PENETAPAN SANKSI -->
+    <div id="return-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-xs hidden items-start justify-center z-50 p-4 sm:p-6 overflow-y-auto">
+        <div class="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl my-6 overflow-hidden border border-gray-100">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
+                <div>
+                    <h3 class="text-lg font-black text-gray-900">Konfirmasi Pengembalian Buku</h3>
+                    <p class="text-xs text-gray-500 font-medium">Verifikasi kondisi buku, status keterlambatan, dan sanksi siswa.</p>
+                </div>
+                <button id="close-return-modal" type="button" class="text-gray-400 hover:text-gray-600 font-black text-lg">✕</button>
             </div>
-            <div class="p-5 space-y-5">
-                <div id="return-book-card" class="border rounded p-4 hidden">
+
+            <div class="p-6 sm:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
+                <!-- Data Buku -->
+                <div id="return-book-card" class="bg-slate-50/80 rounded-2xl p-4 border border-slate-100 hidden">
                     <div class="flex gap-4">
-                        <img id="return-book-cover" src="" alt="cover" class="h-28 w-20 object-cover rounded border border-gray-200 hidden" style="width:80px;height:112px;object-fit:cover;">
-                        <div>
-                            <p class="font-bold text-lg" id="return-book-title">-</p>
-                            <p class="text-sm text-gray-600">Kode: <span id="return-book-code-text">-</span></p>
-                            <p class="text-sm text-gray-600">Status:
-                                <span id="return-book-status" class="font-semibold inline-block px-2 py-0.5 rounded text-xs">-</span>
-                            </p>
-                            <p class="text-sm text-gray-600">Kategori: <span id="return-book-category">-</span> | Rak: <span id="return-book-rack">-</span></p>
-                            <p class="text-sm text-gray-600">Penulis: <span id="return-book-author">-</span> | Hal: <span id="return-book-pages">-</span></p>
+                        <img id="return-book-cover" src="" alt="cover" class="h-28 w-20 object-cover rounded-xl border border-gray-200 hidden bg-white shadow-2xs">
+                        <div class="flex-1 min-w-0 space-y-1">
+                            <p class="font-black text-base text-gray-900 truncate" id="return-book-title">-</p>
+                            <p class="text-xs text-gray-500 font-medium">Kode: <span id="return-book-code-text" class="font-mono font-bold text-gray-800">-</span></p>
+                            <p class="text-xs text-gray-500 font-medium">Kategori: <span id="return-book-category" class="font-bold text-gray-700">-</span> | Rak: <span id="return-book-rack" class="font-bold text-gray-700">-</span></p>
+                            <p class="text-xs text-gray-500 font-medium">Penulis: <span id="return-book-author" class="font-bold text-gray-700">-</span></p>
                         </div>
                     </div>
                 </div>
 
-                <div id="return-borrow-card" class="border rounded p-4 hidden">
-                    <p class="font-semibold text-gray-900 mb-2">Detail Peminjam Aktif</p>
-                    <div id="return-borrow-content" class="text-sm text-gray-700 space-y-1"></div>
+                <!-- Data Peminjaman Aktif -->
+                <div id="return-borrow-card" class="rounded-2xl p-5 border hidden space-y-3">
+                    <h4 class="font-black text-xs uppercase tracking-wider text-gray-700">Rincian Transaksi Peminjam</h4>
+                    <div id="return-borrow-content" class="text-xs text-gray-700 space-y-1.5"></div>
                 </div>
 
-                <div id="return-action-bar" class="hidden border-2 border-blue-300 bg-blue-50 rounded p-4">
-                    <form method="POST" action="{{ route('petugas.circulation.return.store') }}">
+                <!-- Form Pengembalian & Hukuman -->
+                <div id="return-action-bar" class="hidden space-y-4">
+                    <form method="POST" action="{{ route('petugas.circulation.return.store') }}" class="space-y-5">
                         @csrf
                         <input type="hidden" name="book_code" id="return-submit-book-code">
-                        <button
-                            type="submit"
-                            id="confirm-return-btn"
-                            class="inline-flex items-center justify-center px-5 py-2.5 text-white rounded text-sm font-semibold border shadow-sm"
-                            style="display:inline-flex;min-width:220px;background:#16a34a;border-color:#15803d;cursor:pointer;opacity:1;"
-                        >
-                            Kembalikan Buku
-                        </button>
+
+                        <!-- Kondisi Buku: Normal vs Hilang -->
+                        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-3">
+                            <label class="block text-xs font-black text-gray-800 uppercase tracking-wider">Kondisi Buku yang Dikembalikan</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <label class="p-3 bg-white border border-gray-200 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-bold text-gray-800 shadow-2xs">
+                                    <input type="radio" name="return_condition" value="normal" checked onchange="toggleConditionFields(this.value)">
+                                    <span>📗 Buku Kembali (Normal)</span>
+                                </label>
+                                <label class="p-3 bg-white border border-gray-200 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-bold text-red-700 shadow-2xs">
+                                    <input type="radio" name="return_condition" value="lost" onchange="toggleConditionFields(this.value)">
+                                    <span>📕 Buku Hilang (Lost)</span>
+                                </label>
+                            </div>
+
+                            <!-- Input Denda Kehilangan Kustom jika Buku Hilang -->
+                            <div id="lost-fine-section" class="hidden pt-3 border-t border-slate-200 space-y-2">
+                                <label class="block text-xs font-black text-red-700 uppercase tracking-wider">Nominal Denda Ganti Rugi Buku Hilang (Rp)</label>
+                                <input type="number" name="lost_fine_amount" value="50000" min="0" step="1000" class="w-full text-xs font-bold rounded-xl border-red-300 focus:border-red-500 focus:ring-red-500" placeholder="Masukkan denda kehilangan (Contoh: 50000)">
+                                <p class="text-[10px] text-gray-500">Pustakawan / Admin bebas menentukan besaran denda ganti rugi sesuai harga buku.</p>
+                            </div>
+                        </div>
+
+                        <!-- Opsi Hukuman jika Terlambat -->
+                        <div id="late-punishment-section" class="hidden p-4 bg-amber-50/60 rounded-2xl border border-amber-200 space-y-3">
+                            <label class="block text-xs font-black text-amber-900 uppercase tracking-wider">Pilih Sanksi Keterlambatan untuk Siswa</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <label class="p-3 bg-white border border-amber-300 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-bold text-gray-800 shadow-2xs">
+                                    <input type="radio" name="punishment_type" value="fine" checked onchange="togglePunishmentFields(this.value)">
+                                    <span>💰 Denda (Rp 15.000/Hari)</span>
+                                </label>
+                                <label class="p-3 bg-white border border-amber-300 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-bold text-amber-800 shadow-2xs">
+                                    <input type="radio" name="punishment_type" value="social" onchange="togglePunishmentFields(this.value)">
+                                    <span>🧹 Hukuman Sosial</span>
+                                </label>
+                            </div>
+
+                            <div id="social-punishment-input-section" class="hidden pt-2 space-y-1.5">
+                                <label class="block text-[11px] font-black text-amber-900 uppercase tracking-wider">Deskripsi Tugas Sosial Siswa</label>
+                                <input type="text" name="social_punishment_description" placeholder="Contoh: Membersihkan toilet lantai 2 / Menata rak novel" class="w-full text-xs rounded-xl border-amber-300 focus:ring-amber-500 focus:border-amber-500" value="Membersihkan toilet lantai 2">
+                            </div>
+                        </div>
+
+                        <div class="pt-2">
+                            <button
+                                type="submit"
+                                id="confirm-return-btn"
+                                class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                                <span>Konfirmasi Pengembalian Buku</span>
+                            </button>
+                        </div>
                     </form>
-                    @error('book_code')
-                        <p class="text-red-600 text-sm mt-2">{{ $message }}</p>
-                    @enderror
                 </div>
             </div>
         </div>
@@ -165,11 +206,13 @@
             const returnBookCover = document.getElementById('return-book-cover');
             const returnBookTitle = document.getElementById('return-book-title');
             const returnBookCodeText = document.getElementById('return-book-code-text');
-            const returnBookStatus = document.getElementById('return-book-status');
             const returnBookCategory = document.getElementById('return-book-category');
             const returnBookRack = document.getElementById('return-book-rack');
             const returnBookAuthor = document.getElementById('return-book-author');
-            const returnBookPages = document.getElementById('return-book-pages');
+            const lostFineSection = document.getElementById('lost-fine-section');
+            const latePunishmentSection = document.getElementById('late-punishment-section');
+            const socialPunishmentInputSection = document.getElementById('social-punishment-input-section');
+
             let stream = null;
             let detector = null;
             let timer = null;
@@ -185,116 +228,105 @@
                 return '';
             }
 
-            function setStatusBadge(status) {
-                const s = String(status || '').toUpperCase();
-                returnBookStatus.classList.remove(
-                    'bg-green-100', 'text-green-700',
-                    'bg-red-100', 'text-red-700',
-                    'bg-yellow-100', 'text-yellow-700',
-                    'bg-gray-100', 'text-gray-700'
-                );
-
-                if (s === 'AVAILABLE') {
-                    returnBookStatus.classList.add('bg-green-100', 'text-green-700');
-                } else if (s === 'BORROWED' || s === 'LOST') {
-                    returnBookStatus.classList.add('bg-red-100', 'text-red-700');
-                } else if (s === 'RESERVED') {
-                    returnBookStatus.classList.add('bg-yellow-100', 'text-yellow-700');
+            window.toggleConditionFields = function(val) {
+                if (val === 'lost') {
+                    lostFineSection?.classList.remove('hidden');
+                    latePunishmentSection?.classList.add('hidden');
                 } else {
-                    returnBookStatus.classList.add('bg-gray-100', 'text-gray-700');
+                    lostFineSection?.classList.add('hidden');
                 }
-            }
+            };
 
-            function setReturnButtonState(canReturn) {
-                confirmReturnBtn.disabled = !canReturn;
-                confirmReturnBtn.style.display = 'inline-flex';
-                confirmReturnBtn.style.visibility = 'visible';
-                confirmReturnBtn.style.opacity = '1';
-
-                if (canReturn) {
-                    confirmReturnBtn.textContent = 'Kembalikan Buku';
-                    confirmReturnBtn.style.background = '#16a34a';
-                    confirmReturnBtn.style.borderColor = '#15803d';
-                    confirmReturnBtn.style.cursor = 'pointer';
+            window.togglePunishmentFields = function(val) {
+                if (val === 'social') {
+                    socialPunishmentInputSection?.classList.remove('hidden');
                 } else {
-                    confirmReturnBtn.textContent = 'Tidak ada pinjaman aktif';
-                    confirmReturnBtn.style.background = '#9ca3af';
-                    confirmReturnBtn.style.borderColor = '#6b7280';
-                    confirmReturnBtn.style.cursor = 'not-allowed';
+                    socialPunishmentInputSection?.classList.add('hidden');
                 }
-            }
+            };
 
             async function loadReturnByCode(code) {
-                const response = await fetch(`${returnScanBase}/${encodeURIComponent(code)}`);
-                if (!response.ok) return alert('Buku tidak ditemukan');
-                const payload = await response.json();
-                const book = payload.book;
-                const borrow = payload.borrow;
+                try {
+                    const response = await fetch(`${returnScanBase}/${encodeURIComponent(code)}`);
+                    if (!response.ok) return alert('Buku tidak ditemukan');
+                    const payload = await response.json();
+                    const book = payload.book;
+                    const borrow = payload.borrow;
 
-                returnBookTitle.textContent = book.title || '-';
-                returnBookCodeText.textContent = book.code || '-';
-                returnBookStatus.textContent = book.status || '-';
-                setStatusBadge(book.status || '-');
-                returnBookCategory.textContent = book.category || '-';
-                returnBookRack.textContent = book.rack_code || '-';
-                returnBookAuthor.textContent = book.author || '-';
-                returnBookPages.textContent = book.pages || '-';
-                returnSubmitBookCode.value = book.code || '';
+                    returnBookTitle.textContent = book.title || '-';
+                    returnBookCodeText.textContent = book.code || '-';
+                    returnBookCategory.textContent = book.category || '-';
+                    returnBookRack.textContent = book.rack_code || '-';
+                    returnBookAuthor.textContent = book.author || '-';
+                    returnSubmitBookCode.value = book.code || '';
 
-                if (book.cover_url) {
-                    returnBookCover.src = book.cover_url;
-                    returnBookCover.classList.remove('hidden');
-                } else {
-                    returnBookCover.classList.add('hidden');
-                    returnBookCover.src = '';
-                }
+                    if (book.cover_url) {
+                        returnBookCover.src = book.cover_url;
+                        returnBookCover.classList.remove('hidden');
+                    } else {
+                        returnBookCover.classList.add('hidden');
+                        returnBookCover.src = '';
+                    }
 
-                returnBookCard.classList.remove('hidden');
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-                document.body.style.overflow = 'hidden';
+                    returnBookCard.classList.remove('hidden');
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                    document.body.style.overflow = 'hidden';
 
-                if (!borrow) {
+                    if (!borrow) {
+                        returnBorrowCard.classList.remove('hidden');
+                        returnBorrowCard.className = 'rounded-2xl p-5 border border-slate-200 bg-slate-50 text-slate-600';
+                        returnBorrowContent.innerHTML = '<div class="text-xs font-bold text-gray-500">Tidak ada transaksi pinjam aktif untuk buku ini.</div>';
+                        returnActionBar.classList.add('hidden');
+                        return;
+                    }
+
+                    const isLate = borrow.late_days > 0;
                     returnBorrowCard.classList.remove('hidden');
-                    returnBorrowContent.innerHTML = '<div class="text-sm text-gray-600">Tidak ada transaksi pinjam aktif untuk buku ini.</div>';
+                    returnBorrowCard.className = isLate 
+                        ? 'rounded-2xl p-5 border border-red-200 bg-red-50/50 text-red-900' 
+                        : 'rounded-2xl p-5 border border-emerald-200 bg-emerald-50/50 text-emerald-900';
+
+                    let lateInfoHtml = '';
+                    if (isLate) {
+                        latePunishmentSection?.classList.remove('hidden');
+                        lateInfoHtml = `
+                            <div class="p-3 bg-red-100/70 rounded-xl border border-red-200 mt-2 space-y-1">
+                                <p class="font-black text-red-800 uppercase text-[11px]">⚠️ TERLAMBAT ${borrow.late_days} HARI</p>
+                                <p class="text-xs font-bold text-red-700">Denda Keterlambatan: Rp ${Number(borrow.fine_preview || 0).toLocaleString('id-ID')} (@ Rp 15.000/hari)</p>
+                                ${borrow.late_reason ? `<p class="text-xs text-gray-700 mt-1"><strong>Alasan Murid:</strong> "${borrow.late_reason}"</p>` : ''}
+                                ${borrow.late_evidence ? `<p class="mt-1"><a href="/petugas/borrows/${borrow.id}/file/evidence" target="_blank" class="text-xs text-indigo-600 font-bold underline">Lihat Foto Surat Dokter / Bukti ↗</a></p>` : ''}
+                            </div>
+                        `;
+                    } else {
+                        latePunishmentSection?.classList.add('hidden');
+                    }
+
+                    returnBorrowContent.innerHTML = `
+                        <div><strong>Peminjam:</strong> ${borrow.borrower.name || '-'} (Kelas: ${borrow.borrower.kelas || '-'})</div>
+                        <div><strong>Tanggal Pinjam:</strong> ${borrow.borrow_date || '-'}</div>
+                        <div><strong>Jatuh Tempo:</strong> ${borrow.due_date || '-'}</div>
+                        <div><strong>Status Waktu:</strong> <span class="font-black ${isLate ? 'text-red-600' : 'text-emerald-600'}">${borrow.time_status}</span></div>
+                        ${lateInfoHtml}
+                    `;
+
                     returnActionBar.classList.remove('hidden');
-                    setReturnButtonState(false);
-                    return;
+                } catch (err) {
+                    console.error(err);
+                    alert('Gagal memuat data pengembalian');
                 }
-
-                const summaryText = borrow.summary && borrow.summary.uploaded
-                    ? `sudah upload (${borrow.summary.status || 'pending'})`
-                    : 'belum upload';
-
-                returnBorrowCard.classList.remove('hidden');
-                returnBorrowContent.innerHTML = `
-                    <div><strong>Peminjam:</strong> ${borrow.borrower.name || '-'} (ID: ${borrow.borrower.id || '-'})</div>
-                    <div><strong>Kelas/Jurusan:</strong> ${borrow.borrower.kelas || '-'} / ${borrow.borrower.jurusan || '-'}</div>
-                    <div><strong>Tanggal pinjam:</strong> ${borrow.borrow_date || '-'}</div>
-                    <div><strong>Deadline:</strong> ${borrow.due_date || '-'}</div>
-                    <div><strong>Status waktu:</strong> ${borrow.time_status}</div>
-                    <div><strong>Keterlambatan:</strong> ${borrow.late_days} hari</div>
-                    <div><strong>Estimasi denda:</strong> Rp ${Number(borrow.fine_preview || 0).toLocaleString('id-ID')}</div>
-                    <div><strong>Rangkuman:</strong> ${summaryText}</div>
-                `;
-
-                returnActionBar.classList.remove('hidden');
-                setReturnButtonState(true);
             }
 
             async function tick() {
                 if (!detector || !video || video.readyState < 2 || scanLocked) return;
                 try {
                     const barcodes = await detector.detect(video);
-                    if (barcodes.length > 0) {
-                        const val = barcodes[0].rawValue || '';
-                        const code = extractCode(val);
-                        if (code) {
-                            scanLocked = true;
-                            await stopScan();
-                            await loadReturnByCode(code);
-                        }
-                    }
+                    if (!barcodes.length) return;
+                    const code = extractCode(barcodes[0].rawValue || '');
+                    if (!code) return;
+                    scanLocked = true;
+                    await stopScan();
+                    await loadReturnByCode(code);
                 } catch (e) {}
             }
 
@@ -308,7 +340,9 @@
                 video.classList.remove('hidden');
                 video.srcObject = stream;
                 scanLocked = false;
-                timer = setInterval(tick, 600);
+                timer = setInterval(tick, 200);
+                startBtn.classList.add('hidden');
+                stopBtn.classList.remove('hidden');
             }
 
             async function startHtml5Scan() {
@@ -339,6 +373,8 @@
                         },
                         () => {}
                     );
+                    startBtn.classList.add('hidden');
+                    stopBtn.classList.remove('hidden');
                 } catch (e) {
                     video.classList.remove('hidden');
                     html5Region.classList.add('hidden');
@@ -348,7 +384,7 @@
                         html5Scanner = null;
                     }
                     console.error(e);
-                    alert('Kamera tidak bisa dibuka. Pastikan izin kamera diberikan. Jika pakai IP lokal, aktifkan Flag "Insecure origins treated as secure" di Chrome terlebih dahulu.');
+                    alert('Kamera tidak bisa dibuka. Pastikan izin kamera diberikan. Jika pakai IP lokal, aktifkan Flag Chrome terlebih dahulu.');
                 }
             }
 
@@ -390,6 +426,8 @@
                     video.classList.remove('hidden');
                 }
                 html5Region.classList.add('hidden');
+                startBtn.classList.remove('hidden');
+                stopBtn.classList.add('hidden');
             }
 
             async function scanFromImageFile(file) {
@@ -414,8 +452,8 @@
                 }
             }
 
-            startBtn.addEventListener('click', () => startScan().catch(console.error));
-            stopBtn.addEventListener('click', () => stopScan());
+            startBtn?.addEventListener('click', () => startScan().catch(console.error));
+            stopBtn?.addEventListener('click', () => stopScan());
             qrPhotoBtn?.addEventListener('click', () => {
                 qrImageInput.value = '';
                 qrImageInput.click();
@@ -434,6 +472,7 @@
                 scanLocked = false;
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
+                returnActionBar.classList.add('hidden');
                 document.body.style.overflow = '';
             });
             modal?.addEventListener('click', (e) => {
@@ -443,8 +482,15 @@
                 modal.classList.remove('flex');
                 document.body.style.overflow = '';
             });
-            setReturnButtonState(false);
             window.addEventListener('beforeunload', () => { stopScan(); });
+
+            window.addEventListener('DOMContentLoaded', () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                if (code) {
+                    loadReturnByCode(code);
+                }
+            });
         })();
     </script>
 </x-app-layout>

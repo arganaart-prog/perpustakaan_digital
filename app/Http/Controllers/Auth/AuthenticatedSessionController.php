@@ -53,16 +53,18 @@ class AuthenticatedSessionController extends Controller
             config(['session.lifetime' => 60 * 24 * 365 * 2]);
         }
 
-        // 🎯 Redirect berdasarkan role
+        // 🎯 Redirect berdasarkan role & Bersihkan Cache Permission
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
         if ($user->hasRole('admin')) {
-            return redirect()->intended(route('admin.dashboard'));
+            return redirect()->route('admin.dashboard');
         }
 
         if ($user->hasRole('petugas')) {
-            return redirect()->intended(route('petugas.dashboard'));
+            return redirect()->route('petugas.dashboard');
         }
 
-        return redirect()->intended(route('dashboard'));
+        return redirect()->route('dashboard');
     }
 
     /**

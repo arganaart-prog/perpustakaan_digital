@@ -13,11 +13,8 @@ use App\Mail\SendOtpMail;
 class PasswordOtpController extends Controller
 {
     /**
-     * Hitung delay (menit) berdasarkan jumlah attempt.
-     *  - 1–2 kali  → 5 menit
-     *  - 3–5 kali  → 20 menit
-     *  - 6–10 kali → 60 menit (1 jam)
-     *  - > 10 kali → 180 menit (3 jam)
+     * hitungDelay: Menentukan waktu tunggu (menit) sebelum user boleh minta OTP lagi.
+     * Semakin sering mencoba, semakin lama delay-nya (antispam).
      */
     private function hitungDelay(int $attempt): int
     {
@@ -283,45 +280,46 @@ class PasswordOtpController extends Controller
             return redirect()->route('login')->withErrors(['email' => 'Sesi tidak valid.']);
         }
 
-        // 🚫 Batasi percobaan
+        // Proteksi percobaan: Jika salah memasukkan kode lebih dari 5 kali, akun ditangguhkan.
         if ($user->code_attempt >= 5) {
             $user->update(['status' => 'suspended']);
-            return redirect()->route('login')->withErrors(['code' => 'Terlalu banyak percobaan salah. Akun disuspend, hubungi petugas/admin.']);
+            return redirect()->route('login')->withErrors(['code' => 'Terlalu banyak percobaan salah. Akun ditangguhkan otomatis, silakan hubungi admin.']);
         }
 
+        // Cari kode aktivasi yang cocok dengan input user dan milik user tersebut.
         $code = \App\Models\ActivationCode::where('code', strtoupper($request->code))
             ->where('user_id', $user->id)
             ->first();
 
-        // ❌ Kode salah atau tidak terikat ke user ini
+        // Validasi: Jika kode tidak ditemukan atau tidak cocok.
         if (!$code) {
-            $user->increment('code_attempt');
+            $user->increment('code_attempt'); // Tambah hitungan percobaan salah.
             $sisa = 5 - $user->code_attempt;
             if ($sisa <= 0) {
                 $user->update(['status' => 'suspended']);
-                return redirect()->route('login')->withErrors(['code' => 'Terlalu banyak percobaan salah. Akun disuspend.']);
+                return redirect()->route('login')->withErrors(['code' => 'Terlalu banyak percobaan salah. Akun ditangguhkan.']);
             }
-            return back()->withErrors(['code' => "Kode salah atau bukan milik Anda. Sisa percobaan: {$sisa}"]);
+            return back()->withErrors(['code' => "Kode aktivasi salah. Sisa percobaan: {$sisa}"]);
         }
 
-        // ♻️ Cek apakah kode sudah pernah dipakai
+        // Cek status penggunaan kode: Pastikan belum pernah dipakai sebelumnya.
         if ($code->is_used) {
-            return back()->withErrors(['code' => 'Kode sudah pernah digunakan.']);
+            return back()->withErrors(['code' => 'Kode ini sudah pernah digunakan sebelumnya.']);
         }
 
-        // 🕒 Cek expired
+        // Cek masa berlaku: Jika sudah lewat waktu expired, kode akan dihapus.
         if ($code->expired_at && now()->gt($code->expired_at)) {
             $code->delete();
-            $user->update(['status' => 'pending']); // Kembalikan ke antrian
-            return back()->withErrors(['code' => 'Kode aktivasi sudah kedaluwarsa. Silakan minta kode baru ke petugas.']);
+            $user->update(['status' => 'pending']); // Kembalikan ke antrian persetujuan.
+            return back()->withErrors(['code' => 'Kode ini sudah kedaluwarsa. Silakan minta kode baru ke petugas.']);
         }
 
-        // ✅ Kode benar — aktifkan akun
+        // Proses AKTIVASI: Kode benar, akun diaktifkan.
         $user->update([
             'status'      => 'active',
             'approved_by' => $code->created_by,
             'approved_at' => now(),
-            'code_attempt'=> 0,
+            'code_attempt'=> 0, // Reset percobaan jika berhasil.
         ]);
 
         $code->update([

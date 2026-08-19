@@ -20,8 +20,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Paksa semua URL jadi HTTPS di production
-        if (app()->environment('production')) {
+        if (
+            app()->environment('production') ||
+            (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+            request()->header('x-forwarded-proto') === 'https' ||
+            str_contains(request()->getSchemeAndHttpHost(), 'https://')
+        ) {
             URL::forceScheme('https');
         }
     }
